@@ -6,6 +6,20 @@ fileprivate let folderDateFormatter: DateFormatter = {
     return formatter
 }()
 
+// AI 角色資料結構
+struct AICharacter: Identifiable {
+    let id = UUID()
+    let name: String
+    let imageName: String // 對應 Assets.xcassets 的圖片名稱
+    let description: String
+}
+
+let aiCharacters = [
+    AICharacter(name: "小晴", imageName: "ai1", description: "溫柔傾聽者，陪你聊聊心事。"),
+    AICharacter(name: "小宇", imageName: "ai2", description: "理性分析師，幫你釐清思緒。"),
+    AICharacter(name: "小樂", imageName: "ai3", description: "正能量夥伴，給你鼓勵與支持。")
+]
+
 struct HomeView: View {
     @StateObject private var viewModel = ThoughtViewModel()
     @FocusState private var isInputFocused: Bool
@@ -105,31 +119,12 @@ struct HomeView: View {
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        viewModel.selectedDate = nil
-                        showFolderSheet = true
-                    }) {
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                    }
-                }
-            }
-            // 資料夾 sheet
             .sheet(isPresented: $showFolderSheet) {
                 if let date = viewModel.selectedDate {
                     FolderSheetView(
                         thoughts: viewModel.groupedThoughts[date] ?? [],
                         date: date
                     )
-                } else {
-                    // 全部記錄列表
-                    AllFolderListView(viewModel: viewModel, onCardTap: { thought in
-                        viewModel.selectedThought = thought
-                        showThoughtDetail = true
-                    })
                 }
             }
             // 單一卡片內容 sheet
@@ -138,6 +133,9 @@ struct HomeView: View {
                     GlassCardDetailView(thought: thought)
                 }
             }
+        }
+        .onAppear {
+            print("[DEBUG] HomeView loaded")
         }
     }
 }
@@ -168,6 +166,7 @@ struct FolderSheetView: View {
     let thoughts: [Thought]
     let date: Date
     @State private var selectedCard: Thought? = nil
+    @State private var showAICharacterSheet = false
 
     var body: some View {
         ZStack {
@@ -199,14 +198,16 @@ struct FolderSheetView: View {
                             )
                         }
                     }
-                    .padding(.bottom, selectedCard == nil ? 0 : 120) // 給懸浮Bar空間
+                    .padding(.bottom, selectedCard == nil ? 0 : 120)
                     .padding()
                 }
             }
-            // 懸浮Bar
-            if let selected = selectedCard {
-                FloatingActionBar(onClose: { selectedCard = nil })
+            if selectedCard != nil {
+                FloatingActionBar(showAICharacterSheet: $showAICharacterSheet, onClose: { selectedCard = nil })
             }
+        }
+        .sheet(isPresented: $showAICharacterSheet) {
+            AICharacterSelectionView(isPresented: $showAICharacterSheet)
         }
     }
 }
@@ -217,7 +218,10 @@ struct GlassCard: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
+        Button(action: {
+            print("[DEBUG] GlassCard tapped: \\(thought.content)")
+            onTap()
+        }) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(thought.content)
                     .font(.body)
@@ -246,16 +250,142 @@ struct GlassCard: View {
     }
 }
 
+struct AIChatView: View {
+    @Environment(\.dismiss) var dismiss
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color.white.opacity(0.7), Color.purple.opacity(0.15)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: { dismiss() }) {
+                        Text("✕ Close Chat")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .padding(10)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(16)
+                            .padding(.top, 16)
+                            .padding(.trailing, 16)
+                    }
+                }
+                Spacer()
+                // 中間圓形漸層球體
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [Color.purple.opacity(0.25), Color.blue.opacity(0.18), Color.white.opacity(0.5)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 160, height: 160)
+                        .shadow(radius: 24)
+                        .blur(radius: 0.5)
+                    Circle()
+                        .stroke(Color.white.opacity(0.25), lineWidth: 6)
+                        .frame(width: 170, height: 170)
+                }
+                .padding(.bottom, 32)
+                Text("Speak your thoughts\nhomie")
+                    .font(.title2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                Spacer()
+                // 可加下方輸入框或語音按鈕
+            }
+        }
+    }
+}
+
+struct AICharacterSelectionView: View {
+    @Binding var isPresented: Bool
+    @State private var selected: AICharacter? = nil
+    @State private var showAIChat = false
+
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color.blue.opacity(0.2), Color.purple.opacity(0.2)], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            VStack(spacing: 32) {
+                Text("選擇一個AI角色")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .padding(.top, 32)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 32) {
+                        ForEach(aiCharacters) { character in
+                            VStack {
+                                Image(character.imageName)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: selected?.id == character.id ? 90 : 70, height: selected?.id == character.id ? 90 : 70)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle()
+                                            .stroke(selected?.id == character.id ? Color.blue : Color.clear, lineWidth: 4)
+                                    )
+                                    .shadow(radius: selected?.id == character.id ? 12 : 4)
+                                    .onTapGesture { selected = character }
+                                Text(character.name)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                }
+                if let character = selected {
+                    Text(character.description)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.bottom, 8)
+                }
+                Spacer()
+                Button(action: {
+                    // 進入AI對話
+                    showAIChat = true
+                }) {
+                    Text("繼續")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(selected == nil ? Color.gray : Color.blue)
+                        .cornerRadius(20)
+                        .opacity(selected == nil ? 0.5 : 1)
+                }
+                .disabled(selected == nil)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 32)
+            }
+        }
+        .fullScreenCover(isPresented: $showAIChat, onDismiss: { isPresented = false }) {
+            AIChatView()
+        }
+    }
+}
+
+// 修改 FloatingActionBar，點擊AI對話時彈出角色選擇
 struct FloatingActionBar: View {
+    @Binding var showAICharacterSheet: Bool
     var onClose: () -> Void
     var body: some View {
         VStack {
             Spacer()
             HStack(spacing: 24) {
-                ActionButton(icon: "person.text.rectangle", label: "AI對話")
-                ActionButton(icon: "arrow.2.squarepath", label: "轉化練習")
-                ActionButton(icon: "pencil.and.outline", label: "引導式寫作")
-                ActionButton(icon: "flame", label: "燒毀掉")
+                Button(action: {
+                    print("[DEBUG] AI對話按鈕被點擊！")
+                    showAICharacterSheet = true
+                }) {
+                    ActionButton(icon: "person.text.rectangle", label: "AI對話")
+                }
+                Button(action: { print("[DEBUG] 轉化練習按鈕被點擊！") }) {
+                    ActionButton(icon: "arrow.2.squarepath", label: "轉化練習")
+                }
+                Button(action: { print("[DEBUG] 引導式寫作按鈕被點擊！") }) {
+                    ActionButton(icon: "pencil.and.outline", label: "引導式寫作")
+                }
+                Button(action: { print("[DEBUG] 燒毀掉按鈕被點擊！") }) {
+                    ActionButton(icon: "flame", label: "燒毀掉")
+                }
             }
             .padding(.vertical, 18)
             .padding(.horizontal, 24)
@@ -267,6 +397,9 @@ struct FloatingActionBar: View {
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .animation(.easeInOut, value: true)
+        .onAppear {
+            print("[DEBUG] FloatingActionBar rendered")
+        }
     }
 }
 
@@ -274,19 +407,15 @@ struct ActionButton: View {
     let icon: String
     let label: String
     var body: some View {
-        Button(action: {
-            // 點擊事件
-        }) {
-            VStack(spacing: 4) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundColor(.white)
-                Text(label)
-                    .font(.caption2)
-                    .foregroundColor(.white)
-            }
-            .padding(8)
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.title2)
+                .foregroundColor(.white)
+            Text(label)
+                .font(.caption2)
+                .foregroundColor(.white)
         }
+        .padding(8)
     }
 }
 
@@ -316,47 +445,6 @@ struct GlassCardDetailView: View {
                 endPoint: .bottomTrailing
             ).ignoresSafeArea()
         )
-    }
-}
-
-struct AllFolderListView: View {
-    @ObservedObject var viewModel: ThoughtViewModel
-    let onCardTap: (Thought) -> Void
-    var body: some View {
-        NavigationView {
-            List {
-                ForEach(Array(viewModel.groupedThoughts.keys).sorted(by: >), id: \.self) { date in
-                    Section(header: Text(folderDateFormatter.string(from: date)).foregroundColor(.primary)) {
-                        ForEach(viewModel.groupedThoughts[date] ?? []) { thought in
-                            Button(action: { onCardTap(thought) }) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(thought.content)
-                                        .font(.body)
-                                        .lineLimit(2)
-                                    Text(thought.timestamp, style: .time)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                        .onDelete { indexSet in
-                            indexSet.forEach { index in
-                                if let t = viewModel.groupedThoughts[date]?[index] {
-                                    viewModel.deleteThought(t)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .navigationTitle("我的情緒")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("關閉") { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
-                }
-            }
-        }
     }
 }
 
